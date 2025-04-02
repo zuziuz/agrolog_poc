@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 class DatabaseClient:
     """Client for database operations with BigQuery."""
 
-    # def __init__(self, project_id: str, service_account_path: str):
     def __init__(self, project_id: str, service_account_json: str):
         """
         Initialize database client with project and service account.

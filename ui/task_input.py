@@ -4,7 +4,7 @@ UI components for task input forms.
 import logging
 import pandas as pd
 import streamlit as st
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 from datetime import date
 
 # Using relative imports that work when running streamlit directly

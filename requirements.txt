@@ -1,0 +1,13 @@
+# Core dependencies
+streamlit>=1.44.1
+pandas>=2.2.3
+requests>=2.32.3
+
+# Google Cloud services
+google>=3.0.0
+google-genai>=1.8.0
+google-cloud-bigquery>=3.31.0
+google-auth>=2.38.0
+
+# Data validation and models
+pydantic>=2.11.1
