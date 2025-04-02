@@ -1,0 +1,140 @@
+[
+  {
+    "pdf_path": "few_shot_examples/fish.pdf",
+    "expected_output":
+    {
+      "orders":
+              [
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Hermanos Tamago, Puesto 25-26, E-20180, Oiartzun"
+                },
+                {
+                  "load": "Kimpex A/S, Tolnevej 310, DK-9870, Sindal",
+                  "unload": "ARGIMAR, Puesto 3 , E-20180, OYARZUN"
+                },
+                {
+                  "load": "Fiorital S.P.A, Localita Marittima 114, I-30135, Venezia",
+                  "unload": "Olano Seafood Iberica, C/Antxontxipi 11, E-20305, Irun"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Olano Seafood Iberica, Zaisa 3C/Antxontxipi 11, E-20305, Irun"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Indo Transportes, Poligono Ubegun 4, E-20810, Orio"
+                },
+                {
+                  "load": "North Sea Seafood As, Sandviksboder 1A, N-5035, Bergen",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Fonfisk Hanstholm A/S, Hamborgvej 16, DK-7730, Hanstholm",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Fonfisk Hanstholm A/S, Hamborgvej 16, DK-7730, Hanstholm",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Indo Transportes, Poligono Ubegun N.O 4, E-20810, Aia Orio"
+                },
+                {
+                  "load": "Chrisfish Danmark A/S, Fiskerihavnsgade 47, DK-9900, Frederikshavn",
+                  "unload": "Laymar SL, Puesto 76 B, E-28053, Madrid"
+                },
+                {
+                  "load": "Vikenco AS, Rindarøyvegen 383, N-6480, Aukra",
+                  "unload": "Serpeska S.A., Puesto 99, E-28053, Madrid Mercamadrid"
+                },
+                {
+                  "load": "royal greenland A/S, Hellebarden 7, DK-9230, Svenstrup J",
+                  "unload": "Transportes J. Carbo, Despacho 5-6, E-28053, Madrid"
+                }
+              ]
+    }
+  },
+  {
+    "pdf_path": "few_shot_examples/TransportOrder.pdf",
+    "expected_output": {
+      "orders": [
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "Blue Water Shipping A/S, Istedvej 7, DK-6330 Padborg"
+        },
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "Blue Water Shipping A/S, Istedvej 7, DK-6330 Padborg"
+        },
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "Blue Water Shipping A/S, Istedvej 7, DK-6330 Padborg"
+        },
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "Blue Water Shipping A/S, Istedvej 7, DK-6330 Padborg"
+        },
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "H.P. Therkelsen A/S, Eksportvej 1, DK-6330 Padborg"
+        },
+        {
+          "load": "Terminal 1 NY, Brages Veg 12, N-2060 Gardermoen",
+          "unload": "Thermo-Transit Danmark A/S, Omfartsvejen 1, DK-6330 Padborg"
+        }
+      ]
+    }
+  },
+  {
+    "pdf_path": "few_shot_examples/TransportOrder6.pdf",
+    "expected_output":
+    [
+        {
+          "load": "Productos VALENT, S.A., Castell de Bellaguarda 2-4, E-17007 Girona",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "Productos VALENT, S.A., Castell de Bellaguarda 2-4, E-17007 Girona",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "VALENT, Castell de Bellaguarda 2-4, E-17007 Girona Barri Taiala - Germans Sabat",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "Farré Logistics - Grup Ondara Logistica, A-2 41 .849390, 2.773599, E-17455 Caldes de Malavella",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "Sarquella, Almacen de pont Xetmar, E-17844 Cornellà del Terri Pont-Xetmar",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "NOEL ALIMENTARIA S.A.U., Pla de Begudà, NOEL ALIMENTARIA S.A.U., E-17857 Sant Joan les Fonts",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        },
+        {
+          "load": "CARNIQUES D'OSONA 2, Carrer Cabreres, 3, E-08500 Vic",
+          "unload": "Blue Water Shipping Espana SA, Calle 100 esquina 112 c/o PASAPESCA, FRIGORIFICOS, E-08820 El Prat de Llobregat"
+        }
+    ]
+  },
+  {
+    "pdf_path": "few_shot_examples/TransportOrder6.pdf",
+    "expected_output":
+            [
+              {"load": "ZOO SUPPORT SCAN, Svista Lagerväg 2, 63502 Eskilstuna, Sverige",
+              "unload": "Logistikksenter Oslo Alfasetveien 24 0024 Oslo, Norge"}
+            ]
+  }
+]
