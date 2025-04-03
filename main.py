@@ -12,8 +12,7 @@ from services.pdf_extractor import PDFExtractor
 from ui.task_input import TaskInputUI
 from ui.address_update import AddressUpdateUI
 from ui.pdf_extractor import PDFExtractorUI
-from utils.helpers import load_config, ensure_directories_exist
-
+from utils.helpers import load_config
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -94,21 +93,6 @@ def main():
 
     st.title("Trucking Tasks Processor")
 
-    # Add app description
-    st.markdown("""
-    This application processes trucking tasks, validates addresses, updates coordinates, 
-    and now supports extracting orders from PDF files.
-
-    **Features:**
-    - Process tasks individually or in bulk via CSV
-    - Update coordinates for existing addresses
-    - Extract shipping orders from PDF documents
-    - Arrange pick-up and delivery routes in custom order
-    """)
-
-    # Ensure required directories exist
-    ensure_directories_exist()
-
     try:
         # Load configuration from Streamlit secrets
         config = load_config(st.secrets)
@@ -121,38 +105,20 @@ def main():
         address_validator, db_client, task_processor, pdf_extractor = services
         task_input_ui, address_update_ui, pdf_extractor_ui = ui_components
 
-        # Create tabs for different functionalities
-        task_tab, update_tab, pdf_tab = st.tabs([
-            "Process Tasks",
-            "Update Addresses",
-            "Extract Orders from PDF"
+
+        pdf_tab, update_tab = st.tabs([
+            "Extract Orders from PDF",
+            "Update Addresses"
         ])
 
-        with task_tab:
-            # CSV upload section
-            st.subheader("Upload Tasks")
-            st.write("Upload a CSV file with tasks or create a new route manually.")
-
-            uploaded_file = st.file_uploader("Upload tasks CSV", type="csv")
-
-            if uploaded_file:
-                # Process uploaded CSV
-                task_input_ui.process_uploaded_csv(uploaded_file)
-            else:
-                # Create form for manual route input
-                route = task_input_ui.create_from_to_form()
-
-                if route:
-                    # Process the route
-                    task_input_ui.process_route(route)
-
-        with update_tab:
-            # Address update form
-            address_update_ui.create_update_form()
 
         with pdf_tab:
             # PDF extraction UI
             pdf_extractor_ui.render_pdf_extraction_ui()
+
+        with update_tab:
+            # Address update form
+            address_update_ui.create_update_form()
 
         # Ensure all buffered data is written to database at the end
         db_client.flush_buffers()
