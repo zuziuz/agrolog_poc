@@ -12,10 +12,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def ensure_directories_exist():
-    """Ensure that any required directories exist."""
-    # Create directories for temp file storage if needed
-    os.makedirs("tmp", exist_ok=True)
+# def ensure_directories_exist():
+#     """Ensure that any required directories exist."""
+#     # Create directories for temp file storage if needed
+#     os.makedirs("tmp", exist_ok=True)
 
 
 def load_config(secrets) -> Dict[str, Any]:

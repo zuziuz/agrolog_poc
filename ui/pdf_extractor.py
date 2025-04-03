@@ -6,9 +6,10 @@ import streamlit as st
 import tempfile
 import os
 import base64
-import uuid
 from typing import List
 import pandas as pd
+from datetime import datetime
+import glob
 
 from models.task import TaskLocation, ProcessingResult, TaskType
 from services.pdf_extractor import PDFExtractor, Order
@@ -16,6 +17,7 @@ from services.address_validator import AddressValidator
 from services.database_client import DatabaseClient
 from services.task_processor import TaskProcessor
 from ui.task_input import TaskInputUI
+from utils.helpers import clean_address
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,98 +54,214 @@ class PDFExtractorUI:
             st.session_state.pdf_tasks = []
         if 'current_pdf_file' not in st.session_state:
             st.session_state.current_pdf_file = None
-        if 'task_index' not in st.session_state:
-            st.session_state.task_index = 0
         if 'pdf_device_number' not in st.session_state:
-            st.session_state.pdf_device_number = "DEVICE NUMBER"
+            st.session_state.pdf_device_number = "12345678912046"
+        if 'showing_samples' not in st.session_state:
+            st.session_state.showing_samples = True
+        if 'sample_path' not in st.session_state:
+            st.session_state.sample_path = None
 
     def render_pdf_extraction_ui(self):
         """Render the PDF extraction UI."""
         st.subheader("Extract Orders from PDF")
 
-        st.markdown("""
-        Upload a PDF file containing shipping orders. The system will extract load and unload 
-        addresses and allow you to review, modify, and submit them as individual tasks.
-        
-        1. Upload a PDF file
-        2. Review extracted tasks
-        3. Arrange them in the desired sequence
-        4. Submit them as tasks
-        """)
+        # Only show sample selection if no PDF is currently being processed
+        if st.session_state.showing_samples and not st.session_state.current_pdf_file:
+            self._show_pdf_samples()
 
-        # PDF upload
-        uploaded_file = st.file_uploader("Upload PDF file", type="pdf")
+        # Device number input (moved above the PDF and task table)
+        device_number = st.text_input(
+            "Truck (Device Number)",
+            value=st.session_state.pdf_device_number,
+            key="pdf_device_input"
+        )
+        # Update the session state with the new value
+        st.session_state.pdf_device_number = device_number
 
-        if uploaded_file:
-            # Check if we've already processed this file
-            if st.session_state.current_pdf_file != uploaded_file.name:
-                st.session_state.current_pdf_file = uploaded_file.name
-                st.session_state.pdf_orders = []
-                st.session_state.pdf_tasks = []
-                st.session_state.task_index = 0
-                st.session_state.pdf_device_number = "TRUCK-001"
+        # PDF upload - only show if no sample is selected
+        if not st.session_state.sample_path:
+            uploaded_file = st.file_uploader("Upload PDF file", type="pdf")
+        else:
+            uploaded_file = None
 
-                # Extract orders from PDF
-                with st.spinner("Extracting orders from PDF..."):
-                    try:
-                        orders = self.pdf_extractor.extract_orders_from_uploaded_file(uploaded_file)
-                        st.session_state.pdf_orders = orders.orders
-
-                        # Create individual tasks from orders
-                        self._create_tasks_from_orders(orders.orders)
-
-                        st.success(f"Extracted {len(orders.orders)} orders from PDF!")
-                    except Exception as e:
-                        st.error(f"Error extracting orders from PDF: {str(e)}")
-                        return
-
-            # Create two columns for PDF viewer and task form
+        # Process either uploaded file or selected sample
+        if uploaded_file or st.session_state.sample_path:
+            # Create columns for PDF viewer and tasks table
             col1, col2 = st.columns([1, 1])
 
             with col1:
                 # Display PDF
-                self._display_pdf(uploaded_file)
+                if uploaded_file:
+                    # Check if this is a new file
+                    if st.session_state.current_pdf_file != uploaded_file.name:
+                        st.session_state.current_pdf_file = uploaded_file.name
+                        self._process_uploaded_pdf(uploaded_file)
 
-                # Device number input (used for all tasks)
-                device_number = st.text_input(
-                    "Truck (Device Number)",
-                    value=st.session_state.pdf_device_number,
-                    key="pdf_device_input"
-                )
-                # Update the session state with the new value
-                st.session_state.pdf_device_number = device_number
+                    self._display_pdf(uploaded_file)
+
+                elif st.session_state.sample_path:
+                    # Display sample PDF
+                    if st.session_state.current_pdf_file != os.path.basename(st.session_state.sample_path):
+                        st.session_state.current_pdf_file = os.path.basename(st.session_state.sample_path)
+                        self._process_sample_pdf(st.session_state.sample_path)
+
+                    # Pass the file path directly to the display method
+                    self._display_pdf_from_file(st.session_state.sample_path)
 
             with col2:
-                # If we have tasks, show them with a navigation interface
+                # If we have tasks, show editable table
                 if st.session_state.pdf_tasks:
-                    self._render_task_management_ui()
+                    self._render_editable_task_table()
                 else:
                     st.warning("No orders extracted from PDF. Please upload a different file.")
 
+
+    def _show_pdf_samples(self):
+        """Show available PDF samples from the pdf_samples directory."""
+        st.subheader("Sample PDFs")
+
+        try:
+            # Get list of PDF files in pdf_samples directory
+            sample_files = glob.glob("pdf_samples/*.pdf")
+
+            if not sample_files:
+                st.info("No sample PDFs available. Please upload your own PDF file.")
+                return
+
+            # Create a selectbox with file names
+            sample_names = [os.path.basename(f) for f in sample_files]
+            selected_sample = st.selectbox(
+                "Select a sample PDF",
+                [""] + sample_names,
+                key="sample_selector"
+            )
+
+            if selected_sample:
+                # User selected a sample
+                selected_path = os.path.join("pdf_samples", selected_sample)
+
+                # Store the sample path
+                st.session_state.sample_path = selected_path
+                st.session_state.showing_samples = False
+
+                # Rerun to refresh UI
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"Error loading PDF samples: {str(e)}")
+
+    def _process_uploaded_pdf(self, uploaded_file):
+        """
+        Process an uploaded PDF file.
+
+        Args:
+            uploaded_file: Streamlit uploaded file object
+        """
+        # Reset state
+        st.session_state.pdf_orders = []
+        st.session_state.pdf_tasks = []
+
+        # Extract orders from PDF
+        with st.spinner("Extracting orders from PDF..."):
+            try:
+                orders = self.pdf_extractor.extract_orders_from_uploaded_file(uploaded_file)
+                st.session_state.pdf_orders = orders.orders
+
+                # Create individual tasks from orders
+                self._create_tasks_from_orders(orders.orders)
+
+                st.success(f"Extracted {len(orders.orders)} orders from PDF!")
+            except Exception as e:
+                st.error(f"Error extracting orders from PDF: {str(e)}")
+
+    def _process_sample_pdf(self, sample_path):
+        """
+        Process a sample PDF file.
+
+        Args:
+            sample_path: Path to the sample PDF file
+        """
+        # Reset state
+        st.session_state.pdf_orders = []
+        st.session_state.pdf_tasks = []
+
+        # Extract orders from PDF
+        with st.spinner("Extracting orders from PDF..."):
+            try:
+                # Read the PDF file
+                with open(sample_path, "rb") as file:
+                    pdf_bytes = file.read()
+
+                # Create a temporary file for processing
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                    temp_file.write(pdf_bytes)
+                    temp_file_path = temp_file.name
+
+                # Process the PDF file
+                orders = None
+
+                # Try using the extract_orders_from_file method if it exists
+                if hasattr(self.pdf_extractor, 'extract_orders_from_file'):
+                    orders = self.pdf_extractor.extract_orders_from_file(temp_file_path)
+                else:
+                    # Create a simple file-like object
+                    with open(temp_file_path, "rb") as file:
+                        # Create a simple uploaded file substitute
+                        class SimpleUploadedFile:
+                            def __init__(self, name, file_data):
+                                self.name = name
+                                self._file_data = file_data
+
+                            def getvalue(self):
+                                return self._file_data
+
+                        # Read the entire file content
+                        file_data = file.read()
+                        simple_file = SimpleUploadedFile(os.path.basename(sample_path), file_data)
+                        orders = self.pdf_extractor.extract_orders_from_uploaded_file(simple_file)
+
+                # Clean up the temporary file
+                os.unlink(temp_file_path)
+
+                if orders and hasattr(orders, 'orders'):
+                    st.session_state.pdf_orders = orders.orders
+                    # Create individual tasks from orders
+                    self._create_tasks_from_orders(orders.orders)
+                    st.success(f"Extracted {len(orders.orders)} orders from PDF!")
+                else:
+                    st.error("Failed to extract orders from PDF: No orders found")
+
+            except Exception as e:
+                st.error(f"Error extracting orders from PDF: {str(e)}")
+                logger.error(f"Sample PDF extraction error: {str(e)}", exc_info=True)
+
     def _create_tasks_from_orders(self, orders: List[Order]):
         """
-        Create individual tasks from extracted orders.
+        Create individual tasks from extracted orders with timestamp in local_id.
 
         Args:
             orders: List of Order objects with load and unload addresses
         """
         st.session_state.pdf_tasks = []
 
+        # Generate timestamp for local ID
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
         # For each order, create separate pickup and delivery tasks
         for i, order in enumerate(orders):
-            # Create pickup task
+            # Create pickup task with timestamp in local_id
             pickup_task = TaskLocation.from_pdf_order(
                 order_data=order.dict(),
                 is_pickup=True,
-                local_id_prefix=f"ORD{i+1}"
+                local_id_prefix=f"ORD{i+1}_{timestamp}"
             )
             pickup_task.sequence = len(st.session_state.pdf_tasks)
 
-            # Create delivery task
+            # Create delivery task with timestamp in local_id
             delivery_task = TaskLocation.from_pdf_order(
                 order_data=order.dict(),
                 is_pickup=False,
-                local_id_prefix=f"ORD{i+1}"
+                local_id_prefix=f"ORD{i+1}_{timestamp}"
             )
             delivery_task.sequence = len(st.session_state.pdf_tasks) + 1
 
@@ -151,187 +269,49 @@ class PDFExtractorUI:
             st.session_state.pdf_tasks.append(pickup_task)
             st.session_state.pdf_tasks.append(delivery_task)
 
-    def _render_task_management_ui(self):
-        """Show the task management UI."""
-        # Show total tasks count and current task
-        total_tasks = len(st.session_state.pdf_tasks)
-        current_index = st.session_state.task_index
-        current_task = st.session_state.pdf_tasks[current_index]
+    def _render_editable_task_table(self):
+        """Show an editable table of tasks."""
+        st.subheader("Extracted Tasks")
 
-        # Create task type indicators (PICKUP or DELIVERY)
-        task_type_label = "PICKUP" if current_task.task_type == TaskType.PICKUP else "DELIVERY"
-
-        # Show task info header with colored badge for type
-        st.markdown(
-            f"""
-            <div style="display: flex; align-items: center; margin-bottom: 1rem;">
-                <div style="font-size: 1.2rem; font-weight: bold; margin-right: 10px;">
-                    Task {current_index + 1} of {total_tasks}
-                </div>
-                <div style="background-color: {'#28a745' if current_task.task_type == TaskType.PICKUP else '#dc3545'}; 
-                            color: white; padding: 3px 10px; border-radius: 10px; font-weight: bold;">
-                    {task_type_label}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        # Create navigation controls
-        col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 1])
-
-        with col_nav1:
-            if st.button("Previous", disabled=current_index <= 0):
-                st.session_state.task_index = max(0, current_index - 1)
-                st.rerun()
-
-        with col_nav2:
-            if st.button("Next", disabled=current_index >= total_tasks - 1):
-                st.session_state.task_index = min(total_tasks - 1, current_index + 1)
-                st.rerun()
-
-        with col_nav3:
-            # Button to add a new blank task after the current one
-            if st.button("Add New Task"):
-                self._add_new_task(after_index=current_index)
-                st.rerun()
-
-        with col_nav4:
-            # Button to delete the current task
-            if st.button("Delete Task", type="secondary"):
-                if len(st.session_state.pdf_tasks) > 1:  # Don't allow deleting the last task
-                    del st.session_state.pdf_tasks[current_index]
-                    # Adjust index if we deleted the last task
-                    if current_index >= len(st.session_state.pdf_tasks):
-                        st.session_state.task_index = len(st.session_state.pdf_tasks) - 1
-                    st.rerun()
-                else:
-                    st.error("Cannot delete the last task")
-
-        # Task type selector
-        task_type = st.selectbox(
-            "Task Type",
-            options=[TaskType.PICKUP, TaskType.DELIVERY],
-            index=0 if current_task.task_type == TaskType.PICKUP else 1,
-            format_func=lambda x: "Pickup (From)" if x == TaskType.PICKUP else "Delivery (To)",
-            key=f"task_type_{current_index}"
-        )
-
-        # Update task type if changed
-        current_task.task_type = task_type
-        st.session_state.pdf_tasks[current_index] = current_task
-
-        # Task editor form
-        updated_task = self.task_input_ui.create_task_form(
-            key_prefix=f"task_{current_index}",
-            prefill=current_task
-        )
-
-        if updated_task:
-            # Preserve the task type and sequence
-            updated_task.task_type = current_task.task_type
-            updated_task.sequence = current_task.sequence
-            st.session_state.pdf_tasks[current_index] = updated_task
-
-        # Show task sequence controls
-        self._show_task_sequence_controls()
-
-        # Add button to submit all tasks
-        if st.button("Submit All Tasks in Sequence", key="submit_all"):
-            self._process_all_tasks()
-
-    def _add_new_task(self, after_index: int, task_type: TaskType = TaskType.PICKUP):
-        """
-        Add a new blank task to the list.
-
-        Args:
-            after_index: Index to insert the task after
-            task_type: Type of task to add
-        """
-        # Create a new blank task
-        new_task = TaskLocation(
-            local_id=f"NEW-{'PICKUP' if task_type == TaskType.PICKUP else 'DELIVERY'}-{uuid.uuid4().hex[:6]}",
-            task_type=task_type,
-            location_address="",
-            sequence=after_index + 1
-        )
-
-        # Insert after current index
-        st.session_state.pdf_tasks.insert(after_index + 1, new_task)
-        st.session_state.task_index = after_index + 1
-
-        # Update sequence numbers
-        self._update_sequence_numbers()
-
-    def _show_task_sequence_controls(self):
-        """Show controls for arranging the tasks in sequence."""
-        st.subheader("Task Sequence")
-
-        st.info("""
-        Arrange the order of tasks to create a route. You can move tasks up and down
-        to optimize your route - for example, collect multiple items before delivering them.
-        """)
-
-        # Show the current sequence of tasks
-        tasks_df = self._create_tasks_summary_df()
-        st.dataframe(tasks_df, height=400)
-
-        # Controls for moving tasks up and down
-        col_arr1, col_arr2 = st.columns(2)
-
-        with col_arr1:
-            if st.button("Move Current Task Up", disabled=st.session_state.task_index <= 0):
-                self._move_task_up()
-
-        with col_arr2:
-            if st.button("Move Current Task Down", disabled=st.session_state.task_index >= len(st.session_state.pdf_tasks) - 1):
-                self._move_task_down()
-
-    def _create_tasks_summary_df(self) -> pd.DataFrame:
-        """
-        Create a DataFrame summarizing all tasks.
-
-        Returns:
-            DataFrame with task summaries
-        """
-        data = []
-
+        # Create a DataFrame from tasks for display
+        tasks_data = []
         for i, task in enumerate(st.session_state.pdf_tasks):
-            data.append({
-                "Sequence": i + 1,
-                "Type": "Pickup" if task.task_type == TaskType.PICKUP else "Delivery",
-                "Local ID": task.local_id,
-                "Address": task.location_address,
-                "Current": "➡️" if i == st.session_state.task_index else ""
+            tasks_data.append({
+                "sequence": i + 1,
+                "type": "Pickup" if task.task_type == TaskType.PICKUP else "Delivery",
+                "local_id": task.local_id,
+                "address": task.location_address
             })
 
-        return pd.DataFrame(data)
+        df = pd.DataFrame(tasks_data)
 
-    def _move_task_up(self):
-        """Move the current task up in the sequence."""
-        if st.session_state.task_index > 0:
-            current_index = st.session_state.task_index
-            tasks = st.session_state.pdf_tasks
-            tasks[current_index], tasks[current_index - 1] = tasks[current_index - 1], tasks[current_index]
-            st.session_state.pdf_tasks = tasks
-            st.session_state.task_index = current_index - 1
-            self._update_sequence_numbers()
+        # Use data_editor to make the address column editable and hide the index
+        edited_df = st.data_editor(
+            df,
+            column_config={
+                "sequence": st.column_config.NumberColumn("Sequence", disabled=True),
+                "type": st.column_config.SelectboxColumn(
+                    "Type",
+                    options=["Pickup", "Delivery"],
+                    disabled=True
+                ),
+                "local_id": st.column_config.TextColumn("Local ID", disabled=True),
+                "address": st.column_config.TextColumn("Address", disabled=False),
+            },
+            use_container_width=True,
+            key="task_table",
+            hide_index=True
+        )
 
-    def _move_task_down(self):
-        """Move the current task down in the sequence."""
-        if st.session_state.task_index < len(st.session_state.pdf_tasks) - 1:
-            current_index = st.session_state.task_index
-            tasks = st.session_state.pdf_tasks
-            tasks[current_index], tasks[current_index + 1] = tasks[current_index + 1], tasks[current_index]
-            st.session_state.pdf_tasks = tasks
-            st.session_state.task_index = current_index + 1
-            self._update_sequence_numbers()
+        # Update tasks with edited addresses
+        for i, row in edited_df.iterrows():
+            if i < len(st.session_state.pdf_tasks) and row["address"] != st.session_state.pdf_tasks[i].location_address:
+                # Clean the address before storing it
+                st.session_state.pdf_tasks[i].location_address = clean_address(row["address"])
 
-    def _update_sequence_numbers(self):
-        """Update sequence numbers for all tasks based on their positions."""
-        for i, task in enumerate(st.session_state.pdf_tasks):
-            task.sequence = i
-
+        # Add button to submit all tasks
+        if st.button("Submit All Tasks", key="submit_all"):
+            self._process_all_tasks()
     def _process_all_tasks(self):
         """Process all tasks in the current sequence."""
         # Validate tasks first
@@ -458,7 +438,8 @@ class PDFExtractorUI:
         st.session_state.pdf_orders = []
         st.session_state.pdf_tasks = []
         st.session_state.current_pdf_file = None
-        st.session_state.task_index = 0
+        st.session_state.sample_path = None
+        st.session_state.showing_samples = True
 
     @staticmethod
     def _display_pdf(uploaded_file):
@@ -490,3 +471,31 @@ class PDFExtractorUI:
 
         # Clean up the temporary file
         os.unlink(temp_file_path)
+
+    @staticmethod
+    def _display_pdf_from_file(file_path_or_handle):
+        """
+        Display a PDF from a file path or file handle.
+
+        Args:
+            file_path_or_handle: Either a file path string or open file handle
+        """
+        # Check if we received a string (file path) or file handle
+        if isinstance(file_path_or_handle, str):
+            # It's a file path, so open and read it
+            with open(file_path_or_handle, "rb") as f:
+                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+        else:
+            # It's already a file handle, read it directly
+            base64_pdf = base64.b64encode(file_path_or_handle.read()).decode('utf-8')
+
+        # Embed PDF viewer
+        pdf_display = f"""
+        <iframe
+            src="data:application/pdf;base64,{base64_pdf}#pagemode=none"
+            width="100%"
+            height="800"
+            style="border: none;"
+        ></iframe>
+        """
+        st.markdown(pdf_display, unsafe_allow_html=True)
