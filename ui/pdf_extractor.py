@@ -253,7 +253,7 @@ class PDFExtractorUI:
             pickup_task = TaskLocation.from_pdf_order(
                 order_data=order.dict(),
                 is_pickup=True,
-                local_id_prefix=f"ORD{i+1}_{timestamp}"
+                local_id_prefix=f"{timestamp}_ORD{i+1}"
             )
             pickup_task.sequence = len(st.session_state.pdf_tasks)
 
@@ -261,7 +261,7 @@ class PDFExtractorUI:
             delivery_task = TaskLocation.from_pdf_order(
                 order_data=order.dict(),
                 is_pickup=False,
-                local_id_prefix=f"ORD{i+1}_{timestamp}"
+                local_id_prefix=f"{timestamp}_ORD{i+1}"
             )
             delivery_task.sequence = len(st.session_state.pdf_tasks) + 1
 
@@ -444,58 +444,216 @@ class PDFExtractorUI:
     @staticmethod
     def _display_pdf(uploaded_file):
         """
-        Display the uploaded PDF file.
+        Display the uploaded PDF file using the latest PDF.js version for better browser compatibility.
 
         Args:
             uploaded_file: Streamlit uploaded file object
         """
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            temp_file.write(uploaded_file.getvalue())
-            temp_file_path = temp_file.name
+        # Get PDF bytes from uploaded file
+        pdf_bytes = uploaded_file.getvalue()
 
-        # Display PDF using HTML iframe
-        with open(temp_file_path, "rb") as f:
-            base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+        # Create a download button for the PDF
+        st.download_button(
+            label="📥 Download PDF",
+            data=pdf_bytes,
+            file_name=uploaded_file.name,
+            mime="application/pdf"
+        )
 
-        # Embed PDF viewer
-        pdf_display = f"""
-        <iframe
-            src="data:application/pdf;base64,{base64_pdf}#pagemode=none"
-            width="100%"
-            height="800"
-            style="border: none;"
-        ></iframe>
+        # Encode PDF to base64
+        base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        # Use PDF.js viewer with the base64 data
+        # Using latest version (5.0.375) with ES module support
+        pdf_js_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>PDF Viewer</title>
+            <style>
+                #pdf-container {{
+                    width: 100%;
+                    height: 750px;
+                    overflow: auto;
+                    background: #fafafa;
+                    border: 1px solid #e0e0e0;
+                }}
+                .pdf-page-canvas {{
+                    display: block;
+                    margin: 5px auto;
+                    border: 1px solid #e0e0e0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="pdf-container"></div>
+            
+            <script type="module">
+                // Import the PDF.js library (using ES modules)
+                import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.min.mjs';
+                
+                // Set the worker source path
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.worker.min.mjs';
+                
+                // Base64 data of the PDF
+                const pdfData = atob('{base64_pdf}');
+                
+                // Convert base64 to Uint8Array
+                const pdfBytes = new Uint8Array(pdfData.length);
+                for (let i = 0; i < pdfData.length; i++) {{
+                    pdfBytes[i] = pdfData.charCodeAt(i);
+                }}
+                
+                // Load the PDF document
+                const loadingTask = pdfjsLib.getDocument({{ data: pdfBytes }});
+                loadingTask.promise.then(function(pdf) {{
+                    console.log('PDF loaded');
+                    
+                    // Container for all pages
+                    const container = document.getElementById('pdf-container');
+                    
+                    // Render pages sequentially
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
+                        pdf.getPage(pageNum).then(function(page) {{
+                            const scale = 1.5;
+                            const viewport = page.getViewport({{scale: scale}});
+                            
+                            // Create canvas for this page
+                            const canvas = document.createElement('canvas');
+                            canvas.className = 'pdf-page-canvas';
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            container.appendChild(canvas);
+                            
+                            // Render PDF page into canvas context
+                            const context = canvas.getContext('2d');
+                            const renderContext = {{
+                                canvasContext: context,
+                                viewport: viewport
+                            }};
+                            page.render(renderContext);
+                        }});
+                    }}
+                }}).catch(function(error) {{
+                    console.error('Error loading PDF:', error);
+                    document.getElementById('pdf-container').innerHTML = 
+                        '<div style="color: red; padding: 20px;">Error loading PDF. Please try downloading instead.</div>';
+                }});
+            </script>
+        </body>
+        </html>
         """
-        st.markdown(pdf_display, unsafe_allow_html=True)
 
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
+        # Display the PDF.js viewer HTML
+        st.components.v1.html(pdf_js_html, height=800)
 
     @staticmethod
     def _display_pdf_from_file(file_path_or_handle):
         """
-        Display a PDF from a file path or file handle.
+        Display a PDF using Mozilla's PDF.js viewer (latest version) for better browser compatibility.
 
         Args:
             file_path_or_handle: Either a file path string or open file handle
         """
-        # Check if we received a string (file path) or file handle
+        # Get the PDF bytes
         if isinstance(file_path_or_handle, str):
-            # It's a file path, so open and read it
             with open(file_path_or_handle, "rb") as f:
-                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                pdf_bytes = f.read()
         else:
-            # It's already a file handle, read it directly
-            base64_pdf = base64.b64encode(file_path_or_handle.read()).decode('utf-8')
+            file_path_or_handle.seek(0)
+            pdf_bytes = file_path_or_handle.read()
 
-        # Embed PDF viewer
-        pdf_display = f"""
-        <iframe
-            src="data:application/pdf;base64,{base64_pdf}#pagemode=none"
-            width="100%"
-            height="800"
-            style="border: none;"
-        ></iframe>
+        # Create a download button for the PDF
+        st.download_button(
+            label="📥 Download PDF",
+            data=pdf_bytes,
+            file_name="document.pdf",
+            mime="application/pdf"
+        )
+
+        # Encode PDF to base64
+        base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        # Use PDF.js viewer with the base64 data
+        # Using latest version (5.0.375) with ES module support
+        pdf_js_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>PDF Viewer</title>
+            <style>
+                #pdf-container {{
+                    width: 100%;
+                    height: 750px;
+                    overflow: auto;
+                    background: #fafafa;
+                    border: 1px solid #e0e0e0;
+                }}
+                .pdf-page-canvas {{
+                    display: block;
+                    margin: 5px auto;
+                    border: 1px solid #e0e0e0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="pdf-container"></div>
+            
+            <script type="module">
+                // Import the PDF.js library (using ES modules)
+                import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.min.mjs';
+                
+                // Set the worker source path
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.0.375/pdf.worker.min.mjs';
+                
+                // Base64 data of the PDF
+                const pdfData = atob('{base64_pdf}');
+                
+                // Convert base64 to Uint8Array
+                const pdfBytes = new Uint8Array(pdfData.length);
+                for (let i = 0; i < pdfData.length; i++) {{
+                    pdfBytes[i] = pdfData.charCodeAt(i);
+                }}
+                
+                // Load the PDF document
+                const loadingTask = pdfjsLib.getDocument({{ data: pdfBytes }});
+                loadingTask.promise.then(function(pdf) {{
+                    console.log('PDF loaded');
+                    
+                    // Container for all pages
+                    const container = document.getElementById('pdf-container');
+                    
+                    // Render pages sequentially
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
+                        pdf.getPage(pageNum).then(function(page) {{
+                            const scale = 1.5;
+                            const viewport = page.getViewport({{scale: scale}});
+                            
+                            // Create canvas for this page
+                            const canvas = document.createElement('canvas');
+                            canvas.className = 'pdf-page-canvas';
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            container.appendChild(canvas);
+                            
+                            // Render PDF page into canvas context
+                            const context = canvas.getContext('2d');
+                            const renderContext = {{
+                                canvasContext: context,
+                                viewport: viewport
+                            }};
+                            page.render(renderContext);
+                        }});
+                    }}
+                }}).catch(function(error) {{
+                    console.error('Error loading PDF:', error);
+                    document.getElementById('pdf-container').innerHTML = 
+                        '<div style="color: red; padding: 20px;">Error loading PDF. Please try downloading instead.</div>';
+                }});
+            </script>
+        </body>
+        </html>
         """
-        st.markdown(pdf_display, unsafe_allow_html=True)
+
+        # Display the PDF.js viewer HTML
+        st.components.v1.html(pdf_js_html, height=800)
